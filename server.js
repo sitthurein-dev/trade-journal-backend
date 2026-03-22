@@ -7,6 +7,11 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// ====== ROOT (IMPORTANT FOR RENDER) ======
+app.get("/", (req, res) => {
+  res.send("API is running 🚀");
+});
+
 // ====== STORAGE (temporary in memory) ======
 let feed = [];
 let reactions = [];
@@ -24,47 +29,45 @@ function getEmoji(userId) {
 
 // ====== GET FEED ======
 app.get("/api/feed/cards", (req, res) => {
+  console.log("GET /api/feed/cards HIT");
   res.json({ items: feed });
 });
 
 // ====== SHARE TRADE ======
 app.post("/api/feed/share-trade", (req, res) => {
-  const data = req.body;
+  console.log("POST /api/feed/share-trade HIT");
 
-  // prevent duplicate trade
-  const exists = feed.find((f) => f.tradeId === (data.trade_id || data.tradeId));
+  const data = req.body || {};
+  const tradeId = data.trade_id || data.tradeId;
+
+  if (!tradeId) {
+    return res.status(400).json({ error: "Missing tradeId" });
+  }
+
+  const exists = feed.find((f) => f.tradeId === tradeId);
   if (exists) {
     return res.status(400).json({ error: "Already shared" });
   }
 
   const newCard = {
     id: "card_" + Date.now(),
-
-    tradeId: data.trade_id || data.tradeId,
-    pair: data.pair,
-    sessionLabel: data.session_label || data.sessionLabel,
-    direction: data.direction,
-    result: data.result,
-
+    tradeId: tradeId,
+    pair: data.pair || "N/A",
+    sessionLabel: data.session_label || data.sessionLabel || "Unknown",
+    direction: data.direction || "BUY",
+    result: data.result || "OPEN",
     entryPrice: Number(data.entry_price || data.entryPrice || 0),
     exitPrice: Number(data.exit_price || data.exitPrice || 0),
-
     pnl: Number(data.pnl || 0),
-
-    
-
-    tradeTime: data.trade_time || data.tradeTime,
-
+    tradeTime: data.trade_time || data.tradeTime || new Date().toISOString(),
     displayName: "Pre-Billionarie",
-    emojiAvatar: getEmoji(data.user_id),
-
+    emojiAvatar: getEmoji(data.user_id || "anon"),
     loveCount: 0,
     heartbreakCount: 0,
     userReaction: ""
   };
 
   feed.unshift(newCard);
-
   res.json(newCard);
 });
 
@@ -75,14 +78,12 @@ app.post("/api/feed/react", (req, res) => {
   const card = feed.find((c) => c.id === card_id);
   if (!card) return res.status(404).send();
 
-  // remove old reaction
   reactions = reactions.filter((r) => !(r.user_id === user_id && r.card_id === card_id));
 
-  // add new reaction
   reactions.push({ user_id, card_id, reaction_type });
 
-  // recalc counts
   card.loveCount = reactions.filter((r) => r.card_id === card_id && r.reaction_type === "love").length;
+
   card.heartbreakCount = reactions.filter((r) => r.card_id === card_id && r.reaction_type === "heartbreak").length;
 
   res.json({ success: true });
