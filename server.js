@@ -15,6 +15,7 @@ app.get("/", (req, res) => {
 // ====== STORAGE (temporary in memory) ======
 let feed = [];
 let reactions = [];
+let dailyShareCounts = {};
 
 // ====== EMOJI SYSTEM ======
 const emojiPool = ["🔥", "🚀", "💎", "⚡", "🐼", "🦊", "🐯", "🐸", "🐵", "🐧", "🌙", "⭐", "🌊", "🍀"];
@@ -25,6 +26,10 @@ function getEmoji(userId) {
     userEmojiMap[userId] = emojiPool[Math.floor(Math.random() * emojiPool.length)];
   }
   return userEmojiMap[userId];
+}
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 // ====== GET FEED ======
@@ -39,9 +44,20 @@ app.post("/api/feed/share-trade", (req, res) => {
 
   const data = req.body || {};
   const tradeId = data.trade_id || data.tradeId;
+  const userId = data.user_id || "anon";
+  const todayKey = getTodayKey();
+  const shareKey = `${userId}_${todayKey}`;
 
   if (!tradeId) {
     return res.status(400).json({ error: "Missing tradeId" });
+  }
+
+  if (!dailyShareCounts[shareKey]) {
+    dailyShareCounts[shareKey] = 0;
+  }
+
+  if (dailyShareCounts[shareKey] >= 3) {
+    return res.status(400).json({ error: "Daily share limit reached (3 per day)" });
   }
 
   const exists = feed.find((f) => f.tradeId === tradeId);
@@ -61,13 +77,21 @@ app.post("/api/feed/share-trade", (req, res) => {
     pnl: Number(data.pnl || 0),
     tradeTime: data.trade_time || data.tradeTime || new Date().toISOString(),
     displayName: "Pre-Billionarie",
-    emojiAvatar: getEmoji(data.user_id || "anon"),
+    emojiAvatar: getEmoji(userId),
     loveCount: 0,
     heartbreakCount: 0,
     userReaction: ""
   };
 
   feed.unshift(newCard);
+
+  // keep only latest 50 posts
+  if (feed.length > 50) {
+    feed = feed.slice(0, 50);
+  }
+
+  dailyShareCounts[shareKey] += 1;
+
   res.json(newCard);
 });
 
